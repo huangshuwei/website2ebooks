@@ -18,6 +18,11 @@ EXCLUDED_CHAPTER_URLS = frozenset(
 )
 
 BOOK_TITLE = "巴菲特问答录"
+STRIP_LINKS = True
+
+STUB_CHAPTER_MESSAGE = (
+    "（试读版：本章正文未导出，完整版请使用 --all 或 --content-limit 0。）"
+)
 DEFAULT_USER_AGENT = (
     "website2ebooks/0.1 (+https://github.com/local/website2ebooks; respectful crawler)"
 )

@@ -5,9 +5,9 @@ import logging
 import sys
 from pathlib import Path
 
-from website2ebooks.article import fetch_and_parse_chapter
+from website2ebooks.article import fetch_and_parse_chapter, make_stub_chapter
 from website2ebooks.config import BOOK_INDEX_URL, BOOK_TITLE
-from website2ebooks.epub_export import build_epub, build_url_to_epub_map
+from website2ebooks.epub_export import build_epub
 from website2ebooks.http import SiteClient
 from website2ebooks.nav import parse_chapters
 
@@ -24,43 +24,56 @@ def run(
     *,
     output: Path,
     book_url: str,
-    limit: int | None,
+    content_limit: int | None,
     delay: float,
     book_title: str,
 ) -> None:
     with SiteClient(delay=delay) as client:
         all_chapters = parse_chapters(client.get_text, book_url)
-        chapters = all_chapters if limit is None else all_chapters[:limit]
-        if not chapters:
-            raise SystemExit("No chapters to export after applying filters/limit.")
+        if not all_chapters:
+            raise SystemExit("No chapters found in nav.")
 
-        url_map = build_url_to_epub_map(chapters)
+        unlimited = content_limit is None or content_limit <= 0
+        fetch_count = len(all_chapters) if unlimited else min(content_limit, len(all_chapters))
+
         parsed = []
-        for index, chapter in enumerate(chapters, start=1):
-            logging.info(
-                "[%s/%s] %s — %s",
-                index,
-                len(chapters),
-                chapter.title,
-                chapter.url,
-            )
-            parsed.append(
-                fetch_and_parse_chapter(
-                    client,
-                    chapter_url=chapter.url,
-                    chapter_title=chapter.title,
-                    chapter_index=index,
-                    url_to_epub=url_map,
+        for index, chapter in enumerate(all_chapters, start=1):
+            if index <= fetch_count:
+                logging.info(
+                    "[fetch %s/%s] %s — %s",
+                    index,
+                    fetch_count,
+                    chapter.title,
+                    chapter.url,
                 )
-            )
+                parsed.append(
+                    fetch_and_parse_chapter(
+                        client,
+                        chapter_url=chapter.url,
+                        chapter_title=chapter.title,
+                        chapter_index=index,
+                    )
+                )
+            else:
+                if index == fetch_count + 1:
+                    logging.info(
+                        "Skipping fetch for remaining %s chapters (stub pages only)",
+                        len(all_chapters) - fetch_count,
+                    )
+                parsed.append(make_stub_chapter(chapter.title))
 
-        build_epub(chapters, parsed, output, book_title=book_title)
-        logging.info("Wrote %s (%s chapters)", output, len(chapters))
+        build_epub(all_chapters, parsed, output, book_title=book_title)
+        logging.info(
+            "Wrote %s (%s toc entries, %s with full content)",
+            output,
+            len(all_chapters),
+            fetch_count,
+        )
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
-        description="Generate EPUB from buffett.ayaseeri.com book navigation.",
+        description="Generate EPUB from buffett.ayaseeri.com sidebar navigation.",
     )
     parser.add_argument(
         "--output",
@@ -75,10 +88,22 @@ def main(argv: list[str] | None = None) -> None:
         help="Book index URL used to parse sidebar nav",
     )
     parser.add_argument(
+        "--content-limit",
+        type=int,
+        default=2,
+        help="Fetch full article HTML for first N chapters (default: 2). "
+        "TOC always includes all nav entries.",
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Fetch all chapters (same as --content-limit 0)",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=None,
-        help="Export only the first N chapters (for testing, e.g. 2)",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--delay",
@@ -94,11 +119,18 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args(argv)
     _configure_logging(args.verbose)
+
+    content_limit: int | None = args.content_limit
+    if args.all:
+        content_limit = 0
+    if args.limit is not None:
+        content_limit = args.limit
+
     try:
         run(
             output=args.output,
             book_url=args.book_url,
-            limit=args.limit,
+            content_limit=content_limit,
             delay=args.delay,
             book_title=args.title,
         )

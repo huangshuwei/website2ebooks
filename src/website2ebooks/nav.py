@@ -29,7 +29,8 @@ class ChapterRef:
 
 
 def normalize_url(url: str, base: str = BOOK_INDEX_URL) -> str:
-    absolute = urljoin(base, url.strip())
+    href = url.strip().split("#", 1)[0]
+    absolute = urljoin(base, href)
     parsed = urlparse(absolute)
     path = parsed.path or "/"
     if not path.endswith("/"):
@@ -40,23 +41,68 @@ def normalize_url(url: str, base: str = BOOK_INDEX_URL) -> str:
     return normalized
 
 
-def should_skip_nav_href(href: str, base: str = BOOK_INDEX_URL) -> bool:
-    if not href or href.startswith(("javascript:", "mailto:", "tel:")):
+def _is_allowed_chapter_path(path: str) -> bool:
+    if path.startswith("/sources/"):
         return True
-    if "#" in href:
+    if path.startswith("/articles/"):
         return True
-    absolute = normalize_url(href, base)
-    if absolute in EXCLUDED_CHAPTER_URLS:
-        return True
-    parsed = urlparse(absolute)
-    if not parsed.path.startswith(BOOK_PATH_PREFIX):
-        return True
+    if path.startswith(BOOK_PATH_PREFIX):
+        rest = path[len(BOOK_PATH_PREFIX) :].strip("/")
+        return bool(rest)
     return False
 
 
-def _link_title(anchor: html.HtmlElement) -> str:
-    text = anchor.text_content() or ""
+def should_skip_nav_href(href: str, base: str = BOOK_INDEX_URL) -> bool:
+    if not href or href.startswith(("javascript:", "mailto:", "tel:")):
+        return True
+    if href in ("/",):
+        return True
+
+    absolute = normalize_url(href, base)
+    if absolute in EXCLUDED_CHAPTER_URLS:
+        return True
+
+    index_url = normalize_url(BOOK_INDEX_URL, base)
+    if absolute == index_url and "#" in href:
+        return True
+
+    parsed = urlparse(absolute)
+    return not _is_allowed_chapter_path(parsed.path)
+
+
+def _clean_text(el: html.HtmlElement) -> str:
+    return _WHITESPACE.sub(" ", (el.text_content() or "")).strip()
+
+
+def _summary_label(summary: html.HtmlElement) -> str:
+    parts: list[str] = []
+    if summary.text:
+        parts.append(summary.text)
+    for child in summary:
+        if child.tag == "span" and "count" in (child.get("class") or ""):
+            continue
+        if child.tail:
+            parts.append(child.tail)
+    text = "".join(parts)
+    if not text.strip():
+        text = summary.text_content() or ""
     return _WHITESPACE.sub(" ", text).strip()
+
+
+def _link_title(anchor: html.HtmlElement) -> str:
+    title = (anchor.get("title") or "").strip()
+    if title:
+        return _WHITESPACE.sub(" ", title).strip()
+    return _clean_text(anchor)
+
+
+def _in_cat_menu(anchor: html.HtmlElement) -> bool:
+    for ancestor in anchor.iterancestors():
+        if ancestor.tag == "ul" and "cat-menu" in (ancestor.get("class") or ""):
+            return True
+        if ancestor.tag == "nav":
+            break
+    return False
 
 
 def _find_nav_root(doc: html.HtmlElement) -> html.HtmlElement:
@@ -74,17 +120,6 @@ def _find_nav_root(doc: html.HtmlElement) -> html.HtmlElement:
     return nodes[0]
 
 
-def _section_labels_for_anchor(anchor: html.HtmlElement) -> list[str]:
-    labels: list[str] = []
-    for ancestor in anchor.iterancestors():
-        if ancestor.tag in ("h2", "h3", "h4"):
-            label = _WHITESPACE.sub(" ", (ancestor.text_content() or "")).strip()
-            if label and (not labels or labels[-1] != label):
-                labels.append(label)
-    labels.reverse()
-    return labels
-
-
 def parse_chapters_from_html(
     page_html: str, *, page_url: str = BOOK_INDEX_URL
 ) -> list[ChapterRef]:
@@ -93,18 +128,50 @@ def parse_chapters_from_html(
     chapters: list[ChapterRef] = []
     seen_urls: set[str] = set()
 
-    for anchor in nav.xpath(".//a[@href]"):
-        href = anchor.get("href") or ""
+    menu_head = ""
+    summary_label = ""
+    book_part = ""
+
+    for el in nav.iter():
+        if el.tag == "p" and "menu-head" in (el.get("class") or ""):
+            menu_head = _clean_text(el)
+            continue
+        if el.tag == "summary":
+            summary_label = _summary_label(el)
+            book_part = ""
+            continue
+        if el.tag != "a" or not el.get("href"):
+            continue
+        if not _in_cat_menu(el):
+            continue
+
+        classes = el.get("class") or ""
+        if "book-part-link" in classes:
+            book_part = _link_title(el)
+            continue
+
+        href = el.get("href") or ""
         if should_skip_nav_href(href, page_url):
             continue
+
         url = normalize_url(href, page_url)
         if url in seen_urls:
             continue
-        title = _link_title(anchor)
+
+        title = _link_title(el)
         if not title:
             continue
-        section_labels = _section_labels_for_anchor(anchor)
-        toc_path = tuple(section_labels + [title])
+
+        toc_parts: list[str] = []
+        if menu_head:
+            toc_parts.append(menu_head)
+        if summary_label:
+            toc_parts.append(summary_label)
+        if book_part:
+            toc_parts.append(book_part)
+        toc_parts.append(title)
+        toc_path = tuple(toc_parts)
+
         chapters.append(ChapterRef(title=title, url=url, toc_path=toc_path))
         seen_urls.add(url)
 

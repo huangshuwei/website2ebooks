@@ -1,4 +1,6 @@
 dist/
+_nav_dump.txt
+_nav_inner.html
 *.epub
 __pycache__/
 *.py[cod]

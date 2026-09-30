@@ -9,9 +9,14 @@ from urllib.parse import urljoin, urlparse
 from lxml import html
 from lxml.etree import tostring
 
-from website2ebooks.config import ARTICLE_XPATH, ARTICLE_XPATH_FALLBACK, FOOTER_XPATH
+from website2ebooks.config import (
+    ARTICLE_XPATH,
+    ARTICLE_XPATH_FALLBACK,
+    FOOTER_XPATH,
+    STUB_CHAPTER_MESSAGE,
+    STRIP_LINKS,
+)
 from website2ebooks.http import SiteClient
-from website2ebooks.nav import normalize_url
 
 logger = logging.getLogger(__name__)
 
@@ -90,27 +95,11 @@ def _media_type_for_ext(ext: str) -> str:
     return mapping.get(ext, "image/png")
 
 
-def _rewrite_links(
-    article: html.HtmlElement,
-    page_url: str,
-    url_to_epub: dict[str, str],
-) -> None:
-    for anchor in article.xpath(".//a[@href]"):
-        href = (anchor.get("href") or "").strip()
-        if not href or href.startswith("#"):
-            continue
-        if href.startswith(("javascript:", "mailto:", "tel:")):
-            anchor.attrib.pop("href", None)
-            continue
-        absolute = normalize_url(href.split("#")[0], page_url)
-        fragment = ""
-        if "#" in href:
-            fragment = href.split("#", 1)[1]
-        target = url_to_epub.get(absolute)
-        if target:
-            anchor.set("href", f"{target}#{fragment}" if fragment else target)
-        else:
-            anchor.set("href", urljoin(page_url, href))
+def _unwrap_links(article: html.HtmlElement) -> None:
+    for anchor in list(article.xpath(".//a")):
+        anchor.tag = "span"
+        for attr in list(anchor.attrib):
+            del anchor.attrib[attr]
 
 
 def _process_images(
@@ -192,14 +181,14 @@ def parse_chapter_html(
     chapter_title: str,
     chapter_index: int,
     client: SiteClient,
-    url_to_epub: dict[str, str],
 ) -> ParsedChapter:
     doc = html.fromstring(page_html)
     article = _find_article(doc)
     article = html.fromstring(tostring(article, encoding="unicode"))
     _remove_footers(article)
     _strip_unsafe(article)
-    _rewrite_links(article, page_url, url_to_epub)
+    if STRIP_LINKS:
+        _unwrap_links(article)
     images = _process_images(article, page_url, client, chapter_index)
     body = _serialize_article_fragment(article)
     title = _infer_title(article, chapter_title)
@@ -212,7 +201,6 @@ def fetch_and_parse_chapter(
     chapter_url: str,
     chapter_title: str,
     chapter_index: int,
-    url_to_epub: dict[str, str],
 ) -> ParsedChapter:
     page_html = client.get_text(chapter_url)
     return parse_chapter_html(
@@ -221,5 +209,9 @@ def fetch_and_parse_chapter(
         chapter_title=chapter_title,
         chapter_index=chapter_index,
         client=client,
-        url_to_epub=url_to_epub,
     )
+
+
+def make_stub_chapter(title: str) -> ParsedChapter:
+    body = f"<p>{STUB_CHAPTER_MESSAGE}</p>"
+    return ParsedChapter(title=title, xhtml_body=_wrap_xhtml(body, title), images=[])
