@@ -9,7 +9,8 @@ from website2ebooks.article import fetch_and_parse_chapter, make_stub_chapter
 from website2ebooks.config import BOOK_INDEX_URL, BOOK_TITLE
 from website2ebooks.epub_export import build_epub
 from website2ebooks.http import SiteClient
-from website2ebooks.nav import parse_chapters
+from website2ebooks.nav import indices_for_one_per_toc_section, parse_chapters
+from website2ebooks.toc_page import chapter_toc_section
 
 
 def _configure_logging(verbose: bool) -> None:
@@ -25,6 +26,7 @@ def run(
     output: Path,
     book_url: str,
     content_limit: int | None,
+    sample_per_section: bool,
     delay: float,
     book_title: str,
 ) -> None:
@@ -33,16 +35,32 @@ def run(
         if not all_chapters:
             raise SystemExit("No chapters found in nav.")
 
-        unlimited = content_limit is None or content_limit <= 0
-        fetch_count = len(all_chapters) if unlimited else min(content_limit, len(all_chapters))
+        unlimited = not sample_per_section and (
+            content_limit is None or content_limit <= 0
+        )
+        if sample_per_section:
+            fetch_indices = indices_for_one_per_toc_section(all_chapters)
+            fetch_count = len(fetch_indices)
+        elif unlimited:
+            fetch_indices = frozenset(range(1, len(all_chapters) + 1))
+            fetch_count = len(all_chapters)
+        else:
+            limit = min(content_limit or 0, len(all_chapters))
+            fetch_indices = frozenset(range(1, limit + 1))
+            fetch_count = limit
 
         parsed = []
+        fetched_so_far = 0
+        logged_stub = False
         for index, chapter in enumerate(all_chapters, start=1):
-            if index <= fetch_count:
+            if index in fetch_indices:
+                fetched_so_far += 1
+                section = chapter_toc_section(chapter) or "(flat)"
                 logging.info(
-                    "[fetch %s/%s] %s — %s",
-                    index,
+                    "[fetch %s/%s] [组: %s] %s — %s",
+                    fetched_so_far,
                     fetch_count,
+                    section,
                     chapter.title,
                     chapter.url,
                 )
@@ -55,20 +73,30 @@ def run(
                     )
                 )
             else:
-                if index == fetch_count + 1:
+                if not logged_stub:
                     logging.info(
                         "Skipping fetch for remaining %s chapters (stub pages only)",
                         len(all_chapters) - fetch_count,
                     )
+                    logged_stub = True
                 parsed.append(make_stub_chapter(chapter.title))
 
         build_epub(all_chapters, parsed, output, book_title=book_title)
-        logging.info(
-            "Wrote %s (%s toc entries, %s with full content)",
-            output,
-            len(all_chapters),
-            fetch_count,
-        )
+        if sample_per_section:
+            logging.info(
+                "Wrote %s (%s toc entries, %s with full content, %s sections sampled)",
+                output,
+                len(all_chapters),
+                fetch_count,
+                fetch_count,
+            )
+        else:
+            logging.info(
+                "Wrote %s (%s toc entries, %s with full content)",
+                output,
+                len(all_chapters),
+                fetch_count,
+            )
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -100,6 +128,12 @@ def main(argv: list[str] | None = None) -> None:
         help="Fetch all chapters (same as --content-limit 0)",
     )
     parser.add_argument(
+        "--sample-per-section",
+        action="store_true",
+        help="Fetch full content for the first chapter in each sidebar toc section "
+        "(toc_path[0]); remaining entries are stub pages.",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=None,
@@ -121,16 +155,20 @@ def main(argv: list[str] | None = None) -> None:
     _configure_logging(args.verbose)
 
     content_limit: int | None = args.content_limit
+    sample_per_section = args.sample_per_section
     if args.all:
         content_limit = 0
+        sample_per_section = False
     if args.limit is not None:
         content_limit = args.limit
+        sample_per_section = False
 
     try:
         run(
             output=args.output,
             book_url=args.book_url,
             content_limit=content_limit,
+            sample_per_section=sample_per_section,
             delay=args.delay,
             book_title=args.title,
         )

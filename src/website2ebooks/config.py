@@ -41,14 +41,36 @@ body {
   font-family: serif;
   line-height: 1.6;
   margin: 1em;
+  text-align: left;
+  font-size: 1em;
 }
-h1, h2, h3, h4 { line-height: 1.3; }
+p {
+  text-align: left;
+  margin: 0.5em 0;
+}
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.3;
+  text-align: left;
+  font-weight: bold;
+}
+h1, .chapter-title {
+  font-size: 1.35em;
+  margin: 0 0 0.5em 0;
+}
+h2 { font-size: 1.2em; margin: 0.75em 0 0.35em 0; }
+h3 { font-size: 1.05em; margin: 1em 0 0.35em 0; }
+h4 { font-size: 1.02em; }
+h5, h6 { font-size: 1em; }
+.text-muted {
+  font-size: 0.92em;
+  color: #666;
+  margin-bottom: 0.75em;
+}
 img { max-width: 100%; height: auto; }
 a { color: inherit; }
 table { border-collapse: collapse; width: 100%; }
 th, td { border: 1px solid #ccc; padding: 0.25em 0.5em; }
 blockquote { margin-left: 1em; opacity: 0.95; }
-.chapter-title { font-size: 1.25em; margin-bottom: 0.75em; }
 """
 
 ARTICLE_CHROME_PATTERNS: tuple[str, ...] = (

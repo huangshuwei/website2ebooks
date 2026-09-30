@@ -29,6 +29,7 @@ _UNSAFE_TAGS = frozenset({"script", "iframe", "noscript", "style"})
 _CHROME_RES = tuple(re.compile(p) for p in ARTICLE_CHROME_PATTERNS)
 _TAIL_RES = tuple(re.compile(p) for p in ARTICLE_TAIL_PATTERNS)
 _MAX_CHROME_STRIPS = 8
+_MAX_LEADING_TITLE_HEADINGS = 2
 
 
 @dataclass
@@ -252,6 +253,65 @@ def _strip_article_chrome(article: html.HtmlElement) -> None:
         break
 
 
+def _heading_matches_title_candidates(heading_text: str, candidates: set[str]) -> bool:
+    normalized = _normalize_title_text(heading_text)
+    if not normalized:
+        return False
+    if normalized in candidates:
+        return True
+    for candidate in candidates:
+        if not candidate:
+            continue
+        for sep in ("：", ":"):
+            if sep not in candidate:
+                continue
+            nav_part, _, body_part = candidate.partition(sep)
+            nav_part = _normalize_title_text(nav_part)
+            body_part = _normalize_title_text(body_part)
+            if normalized == nav_part or normalized == body_part:
+                return True
+    return False
+
+
+def _strip_leading_duplicate_title(
+    article: html.HtmlElement,
+    *,
+    display_title: str,
+    nav_title: str,
+    body_title: str | None,
+) -> None:
+    candidates = {
+        _normalize_title_text(display_title),
+        _normalize_title_text(nav_title),
+        _normalize_title_text(body_title or ""),
+    }
+    candidates.discard("")
+    removed = 0
+    while removed < _MAX_LEADING_TITLE_HEADINGS and len(article):
+        child = article[0]
+        if child.tag not in ("h1", "h2"):
+            break
+        if _heading_matches_title_candidates(child.text_content() or "", candidates):
+            article.remove(child)
+            removed += 1
+            continue
+        break
+
+
+def _normalize_epub_presentation(article: html.HtmlElement) -> None:
+    for node in article.iter():
+        style = node.get("style")
+        if not style:
+            continue
+        style_lower = style.lower()
+        if node.tag == "p" and (
+            "text-muted" in style_lower or "var(--text-muted" in style_lower
+        ):
+            existing = (node.get("class") or "").strip()
+            node.set("class", f"{existing} text-muted".strip())
+        node.attrib.pop("style", None)
+
+
 def _unwrap_links(article: html.HtmlElement) -> None:
     for anchor in list(article.xpath(".//a")):
         anchor.tag = "span"
@@ -341,9 +401,16 @@ def parse_chapter_html(
     _strip_article_tail(article)
     if STRIP_LINKS:
         _unwrap_links(article)
+    title = merge_chapter_titles(chapter_title, body_title)
+    _normalize_epub_presentation(article)
+    _strip_leading_duplicate_title(
+        article,
+        display_title=title,
+        nav_title=chapter_title,
+        body_title=body_title,
+    )
     images = _process_images(article, page_url, client, chapter_index)
     body = _serialize_article_fragment(article)
-    title = merge_chapter_titles(chapter_title, body_title)
     return ParsedChapter(title=title, xhtml_body=_wrap_xhtml(body, title), images=images)
 
 

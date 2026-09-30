@@ -21,10 +21,16 @@ pip install -e ".[dev]"
 
 ## 使用
 
-**默认（全目录 + 前 2 篇正文）：**
+**默认测试包（全目录 + 每个侧栏大分组 1 篇正文）：**
 
 ```bash
-python -m website2ebooks --output dist/test-2ch.epub
+python -m website2ebooks --sample-per-section --output dist/test-2ch.epub
+```
+
+**快速 smoke（仅前 2 篇正文）：**
+
+```bash
+python -m website2ebooks --content-limit 2 --output dist/test-2ch.epub
 ```
 
 **全书正文：**

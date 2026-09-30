@@ -7,10 +7,14 @@ from ebooklib import epub
 from website2ebooks.nav import ChapterRef
 
 
-def _group_name(chapter: ChapterRef) -> str:
+def chapter_toc_section(chapter: ChapterRef) -> str:
     if len(chapter.toc_path) >= 2:
         return chapter.toc_path[0]
     return ""
+
+
+def _group_name(chapter: ChapterRef) -> str:
+    return chapter_toc_section(chapter)
 
 
 def build_nested_book_toc(

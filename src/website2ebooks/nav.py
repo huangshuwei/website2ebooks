@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from urllib.parse import urljoin, urlparse, urlunparse
 
@@ -178,3 +178,18 @@ def parse_chapters(
     if chapters:
         return chapters
     raise ValueError(f"No chapters found in nav at {book_index_url}")
+
+
+def indices_for_one_per_toc_section(chapters: Sequence[ChapterRef]) -> frozenset[int]:
+    """1-based indices of chapters to fetch when sampling one body per toc section."""
+    from website2ebooks.toc_page import chapter_toc_section
+
+    seen: set[str] = set()
+    out: list[int] = []
+    for i, ch in enumerate(chapters, start=1):
+        key = chapter_toc_section(ch)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(i)
+    return frozenset(out)
