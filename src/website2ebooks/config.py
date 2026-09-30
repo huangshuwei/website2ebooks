@@ -11,6 +11,15 @@ ARTICLE_XPATH_FALLBACK = "//main/article"
 
 FOOTER_XPATH = '//*[@id="article-content"]/section/section/footer'
 
+# buffett.ayaseeri.com 合集页正文内的「本章目录」
+IN_CHAPTER_TOC_XPATH = ".//details[contains(@class,'qa-mobile-toc')]"
+# article 内真正问答正文（非页面 aside[2] 侧栏）
+ARTICLE_BODY_SECTIONS_XPATH = ".//section[contains(@class,'qa-movement')]"
+# 页级本章问答侧栏（不抓取，仅文档/调试）
+PAGE_CHAPTER_SIDEBAR_XPATH = "/html/body/div[2]/aside[contains(@class,'col-right')]"
+CHAPTER_NAV_IN_ARTICLE_XPATH = ".//nav[contains(@class,'qa-chapter-nav')]"
+CHAPTER_CLOSING_ASIDE_XPATH = ".//aside[contains(@class,'qa-chapter-closing')]"
+
 EXCLUDED_CHAPTER_URLS = frozenset(
     {
         "https://buffett.ayaseeri.com/books/buffett-wenda-lu/",
@@ -39,4 +48,17 @@ a { color: inherit; }
 table { border-collapse: collapse; width: 100%; }
 th, td { border: 1px solid #ccc; padding: 0.25em 0.5em; }
 blockquote { margin-left: 1em; opacity: 0.95; }
+.chapter-title { font-size: 1.25em; margin-bottom: 0.75em; }
 """
+
+ARTICLE_CHROME_PATTERNS: tuple[str, ...] = (
+    r"^巴菲特问答录\s*$",
+    r"^第\s*[0-9一二三四五六七八九十]+\s*[篇章节部分]\s*[·\.]?\s*",
+    r"^\d+\s*问\s*$",
+)
+
+ARTICLE_TAIL_PATTERNS: tuple[str, ...] = (
+    r"上一章|下一章|上一篇|下一篇",
+    r"编者过桥",
+    r"^编者导读\s*$",
+)

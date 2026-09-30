@@ -90,10 +90,11 @@ def _summary_label(summary: html.HtmlElement) -> str:
 
 
 def _link_title(anchor: html.HtmlElement) -> str:
+    visible = _clean_text(anchor)
+    if visible:
+        return visible
     title = (anchor.get("title") or "").strip()
-    if title:
-        return _WHITESPACE.sub(" ", title).strip()
-    return _clean_text(anchor)
+    return _WHITESPACE.sub(" ", title).strip()
 
 
 def _in_cat_menu(anchor: html.HtmlElement) -> bool:
@@ -128,17 +129,13 @@ def parse_chapters_from_html(
     chapters: list[ChapterRef] = []
     seen_urls: set[str] = set()
 
-    menu_head = ""
     summary_label = ""
-    book_part = ""
 
     for el in nav.iter():
         if el.tag == "p" and "menu-head" in (el.get("class") or ""):
-            menu_head = _clean_text(el)
             continue
         if el.tag == "summary":
             summary_label = _summary_label(el)
-            book_part = ""
             continue
         if el.tag != "a" or not el.get("href"):
             continue
@@ -147,7 +144,6 @@ def parse_chapters_from_html(
 
         classes = el.get("class") or ""
         if "book-part-link" in classes:
-            book_part = _link_title(el)
             continue
 
         href = el.get("href") or ""
@@ -162,15 +158,10 @@ def parse_chapters_from_html(
         if not title:
             continue
 
-        toc_parts: list[str] = []
-        if menu_head:
-            toc_parts.append(menu_head)
         if summary_label:
-            toc_parts.append(summary_label)
-        if book_part:
-            toc_parts.append(book_part)
-        toc_parts.append(title)
-        toc_path = tuple(toc_parts)
+            toc_path = (summary_label, title)
+        else:
+            toc_path = (title,)
 
         chapters.append(ChapterRef(title=title, url=url, toc_path=toc_path))
         seen_urls.add(url)

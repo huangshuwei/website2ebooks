@@ -55,4 +55,6 @@ def test_parse_nav_fixture_count_and_sources() -> None:
     assert any("/sources/" in ch.url for ch in chapters)
     assert any("neng-li-quan" in ch.url for ch in chapters)
     first = chapters[0]
-    assert "能力圈" in first.title or "neng-li-quan" in first.url
+    assert first.title == "能力圈"
+    assert first.toc_path == ("巴菲特问答录", "能力圈")
+    assert all("专题" not in ch.toc_path for ch in chapters)

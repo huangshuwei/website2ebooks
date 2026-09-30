@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html as html_module
 import uuid
 from pathlib import Path
 
@@ -8,6 +9,7 @@ from ebooklib import epub
 from website2ebooks.article import ParsedChapter
 from website2ebooks.config import BOOK_TITLE, DEFAULT_CSS
 from website2ebooks.nav import ChapterRef
+from website2ebooks.toc_page import build_nested_book_toc
 
 
 def _chapter_file_name(index: int) -> str:
@@ -15,17 +17,16 @@ def _chapter_file_name(index: int) -> str:
 
 
 def build_url_to_epub_map(chapters: list[ChapterRef]) -> dict[str, str]:
-    return {ch.url: _chapter_href(i) for i, ch in enumerate(chapters, start=1)}
+    return {ch.url: f"chapter_{i:03d}.xhtml" for i, ch in enumerate(chapters, start=1)}
 
 
-def _chapter_href(index: int) -> str:
-    return f"chapter_{index:03d}.xhtml"
-
-
-def _flat_toc_title(chapter_ref: ChapterRef) -> str:
-    if chapter_ref.toc_path:
-        return " › ".join(chapter_ref.toc_path)
-    return chapter_ref.title
+def _prepare_chapter_xhtml(xhtml_body: str, chapter_title: str) -> str:
+    safe = html_module.escape(chapter_title)
+    heading = f'<h1 class="chapter-title">{safe}</h1>\n'
+    for marker in ('<body epub:type="bodymatter">', "<body>"):
+        if marker in xhtml_body:
+            return xhtml_body.replace(marker, f"{marker}\n{heading}", 1)
+    return xhtml_body
 
 
 def build_epub(
@@ -56,13 +57,13 @@ def build_epub(
 
     for index, (chapter_ref, content) in enumerate(zip(chapters, parsed, strict=True), start=1):
         file_name = _chapter_file_name(index)
-        display_title = _flat_toc_title(chapter_ref)
         ch = epub.EpubHtml(
-            title=display_title,
+            title=content.title,
             file_name=file_name,
             lang="zh-CN",
         )
-        ch.content = content.xhtml_body.encode("utf-8")
+        xhtml = _prepare_chapter_xhtml(content.xhtml_body, content.title)
+        ch.content = xhtml.encode("utf-8")
         ch.add_item(style)
         book.add_item(ch)
         epub_chapters.append(ch)
@@ -77,7 +78,7 @@ def build_epub(
             )
             book.add_item(item)
 
-    book.toc = epub_chapters
+    book.toc = build_nested_book_toc(chapters, epub_chapters)
     book.add_item(epub.EpubNav())
     book.add_item(epub.EpubNcx())
     book.spine = spine
