@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import html as html_module
+import os
 import uuid
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from ebooklib import epub
 
@@ -12,8 +13,16 @@ from website2ebooks.nav import ChapterRef
 from website2ebooks.toc_page import build_nested_book_toc
 
 
+STYLE_FILE_NAME = "Styles/default.css"
+
+
 def _chapter_file_name(index: int) -> str:
     return f"Text/chapter_{index:03d}.xhtml"
+
+
+def _stylesheet_href_for_chapter(chapter_file_name: str, stylesheet_file_name: str) -> str:
+    chapter_dir = PurePosixPath(chapter_file_name).parent.as_posix()
+    return os.path.relpath(stylesheet_file_name, chapter_dir).replace("\\", "/")
 
 
 def build_url_to_epub_map(chapters: list[ChapterRef]) -> dict[str, str]:
@@ -46,7 +55,7 @@ def build_epub(
 
     style = epub.EpubItem(
         uid="style_default",
-        file_name="Styles/default.css",
+        file_name=STYLE_FILE_NAME,
         media_type="text/css",
         content=DEFAULT_CSS.encode("utf-8"),
     )
@@ -64,7 +73,8 @@ def build_epub(
         )
         xhtml = _prepare_chapter_xhtml(content.xhtml_body, content.title)
         ch.content = xhtml.encode("utf-8")
-        ch.add_item(style)
+        css_href = _stylesheet_href_for_chapter(file_name, STYLE_FILE_NAME)
+        ch.add_link(href=css_href, rel="stylesheet", type="text/css")
         book.add_item(ch)
         epub_chapters.append(ch)
         spine.append(ch.get_id())

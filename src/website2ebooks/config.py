@@ -37,6 +37,7 @@ DEFAULT_USER_AGENT = (
 )
 
 DEFAULT_CSS = """
+/* 正文 1em；标题 1.25em（大两号）。字号 !important 兼容掌阅等阅读器 */
 body {
   font-family: serif;
   line-height: 1.6;
@@ -48,21 +49,21 @@ p {
   text-align: left;
   margin: 0.5em 0;
 }
-h1, h2, h3, h4, h5, h6 {
+p, li, dd, dt, td, th, blockquote, figcaption,
+.text-muted, .qa-source-question p, .qa-answer p {
+  font-size: 1em !important;
+}
+h1.chapter-title, .chapter-title, .w2e-heading {
   line-height: 1.3;
   text-align: left;
   font-weight: bold;
+  font-size: 1.25em !important;
+  margin: 0.75em 0 0.35em 0;
 }
-h1, .chapter-title {
-  font-size: 1.35em;
+h1.chapter-title, .chapter-title {
   margin: 0 0 0.5em 0;
 }
-h2 { font-size: 1.2em; margin: 0.75em 0 0.35em 0; }
-h3 { font-size: 1.05em; margin: 1em 0 0.35em 0; }
-h4 { font-size: 1.02em; }
-h5, h6 { font-size: 1em; }
 .text-muted {
-  font-size: 0.92em;
   color: #666;
   margin-bottom: 0.75em;
 }

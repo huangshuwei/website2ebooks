@@ -312,6 +312,21 @@ def _normalize_epub_presentation(article: html.HtmlElement) -> None:
         node.attrib.pop("style", None)
 
 
+_HEADING_TAGS = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
+
+
+def _normalize_typography(article: html.HtmlElement) -> None:
+    """Replace in-body headings with styled paragraphs for EPUB reader compatibility."""
+    for node in list(article.iter()):
+        if node.tag not in _HEADING_TAGS:
+            continue
+        node.tag = "p"
+        existing = (node.get("class") or "").strip()
+        node.set("class", f"{existing} w2e-heading".strip())
+        node.attrib.pop("role", None)
+        node.attrib.pop("aria-level", None)
+
+
 def _unwrap_links(article: html.HtmlElement) -> None:
     for anchor in list(article.xpath(".//a")):
         anchor.tag = "span"
@@ -409,6 +424,7 @@ def parse_chapter_html(
         nav_title=chapter_title,
         body_title=body_title,
     )
+    _normalize_typography(article)
     images = _process_images(article, page_url, client, chapter_index)
     body = _serialize_article_fragment(article)
     return ParsedChapter(title=title, xhtml_body=_wrap_xhtml(body, title), images=images)

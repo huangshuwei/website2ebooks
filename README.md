@@ -41,6 +41,8 @@ python -m website2ebooks --all --output dist/buffett-wenda-lu.epub --delay 0.5
 
 阅读器内使用 **系统目录**（嵌套分组）；听书按目录叶子章节切换。章末「上一章/下一章/编者过桥」等已剔除。
 
+**掌阅 iReader**：若字号仍异常，请在阅读设置中开启「跟随书籍排版 / 原书样式」，以便加载 EPUB 内嵌 CSS。
+
 ## 测试
 
 ```bash
