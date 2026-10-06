@@ -20,6 +20,7 @@ from website2ebooks.config import (
     IN_CHAPTER_TOC_XPATH,
     STUB_CHAPTER_MESSAGE,
     STRIP_LINKS,
+    stub_fetch_failed_message,
 )
 from website2ebooks.http import SiteClient
 
@@ -449,4 +450,20 @@ def fetch_and_parse_chapter(
 
 def make_stub_chapter(title: str) -> ParsedChapter:
     body = f"<p>{STUB_CHAPTER_MESSAGE}</p>"
+    return ParsedChapter(title=title, xhtml_body=_wrap_xhtml(body, title), images=[])
+
+
+def make_stub_fetch_failed_chapter(
+    title: str,
+    *,
+    attempts: int,
+    error: str,
+) -> ParsedChapter:
+    message = stub_fetch_failed_message(attempts=attempts, error=error)
+    safe = (
+        message.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+    body = f"<p>{safe}</p>"
     return ParsedChapter(title=title, xhtml_body=_wrap_xhtml(body, title), images=[])

@@ -33,11 +33,13 @@ python -m website2ebooks --sample-per-section --output dist/test-2ch.epub
 python -m website2ebooks --content-limit 2 --output dist/test-2ch.epub
 ```
 
-**全书正文：**
+**全书正文（串行抓取、章间成功等待 5 秒、失败重试 3 次）：**
 
 ```bash
-python -m website2ebooks --all --output dist/buffett-wenda-lu.epub --delay 0.5
+python -m website2ebooks --all --output dist/buffett-wenda-lu.epub --delay 0.5 --chapter-success-delay 5 --max-retries 3
 ```
+
+完成后会生成 `dist/buffett-wenda-lu-fetch-report.txt`（成功/失败章节汇总）。仍有失败时 EPUB 会写出，但失败章为占位页，进程退出码为 1。全书约 359 章，仅章间等待即约 30 分钟，整体可能需 1–2 小时以上。
 
 阅读器内使用 **系统目录**（嵌套分组）；听书按目录叶子章节切换。章末「上一章/下一章/编者过桥」等已剔除。
 

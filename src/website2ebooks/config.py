@@ -32,6 +32,10 @@ STRIP_LINKS = True
 STUB_CHAPTER_MESSAGE = (
     "（试读版：本章正文未导出，完整版请使用 --all 或 --content-limit 0。）"
 )
+
+
+def stub_fetch_failed_message(*, attempts: int, error: str) -> str:
+    return f"（本章抓取失败，已重试 {attempts} 次。错误：{error}）"
 DEFAULT_USER_AGENT = (
     "website2ebooks/0.1 (+https://github.com/local/website2ebooks; respectful crawler)"
 )

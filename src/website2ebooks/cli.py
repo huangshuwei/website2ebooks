@@ -5,12 +5,11 @@ import logging
 import sys
 from pathlib import Path
 
-from website2ebooks.article import fetch_and_parse_chapter, make_stub_chapter
 from website2ebooks.config import BOOK_INDEX_URL, BOOK_TITLE
 from website2ebooks.epub_export import build_epub
+from website2ebooks.fetch_run import fetch_chapters_serial, format_fetch_report
 from website2ebooks.http import SiteClient
 from website2ebooks.nav import indices_for_one_per_toc_section, parse_chapters
-from website2ebooks.toc_page import chapter_toc_section
 
 
 def _configure_logging(verbose: bool) -> None:
@@ -21,6 +20,10 @@ def _configure_logging(verbose: bool) -> None:
     )
 
 
+def _default_report_path(output: Path) -> Path:
+    return output.parent / f"{output.stem}-fetch-report.txt"
+
+
 def run(
     *,
     output: Path,
@@ -29,7 +32,11 @@ def run(
     sample_per_section: bool,
     delay: float,
     book_title: str,
-) -> None:
+    chapter_success_delay: float | None,
+    max_retries: int | None,
+    retry_delay: float,
+    report_path: Path | None,
+) -> int:
     with SiteClient(delay=delay) as client:
         all_chapters = parse_chapters(client.get_text, book_url)
         if not all_chapters:
@@ -49,39 +56,45 @@ def run(
             fetch_indices = frozenset(range(1, limit + 1))
             fetch_count = limit
 
-        parsed = []
-        fetched_so_far = 0
-        logged_stub = False
-        for index, chapter in enumerate(all_chapters, start=1):
-            if index in fetch_indices:
-                fetched_so_far += 1
-                section = chapter_toc_section(chapter) or "(flat)"
-                logging.info(
-                    "[fetch %s/%s] [组: %s] %s — %s",
-                    fetched_so_far,
-                    fetch_count,
-                    section,
-                    chapter.title,
-                    chapter.url,
-                )
-                parsed.append(
-                    fetch_and_parse_chapter(
-                        client,
-                        chapter_url=chapter.url,
-                        chapter_title=chapter.title,
-                        chapter_index=index,
-                    )
-                )
-            else:
-                if not logged_stub:
-                    logging.info(
-                        "Skipping fetch for remaining %s chapters (stub pages only)",
-                        len(all_chapters) - fetch_count,
-                    )
-                    logged_stub = True
-                parsed.append(make_stub_chapter(chapter.title))
+        if unlimited:
+            effective_chapter_delay = (
+                5.0 if chapter_success_delay is None else chapter_success_delay
+            )
+            effective_max_retries = 3 if max_retries is None else max_retries
+        else:
+            effective_chapter_delay = chapter_success_delay or 0.0
+            effective_max_retries = 1 if max_retries is None else max_retries
+
+        parsed, outcomes = fetch_chapters_serial(
+            client,
+            all_chapters,
+            fetch_indices,
+            fetch_count=fetch_count,
+            max_retries=effective_max_retries,
+            retry_delay=retry_delay,
+            chapter_success_delay=effective_chapter_delay,
+        )
 
         build_epub(all_chapters, parsed, output, book_title=book_title)
+
+        if outcomes:
+            report = format_fetch_report(
+                outcomes,
+                book_title=book_title,
+                output_path=str(output),
+            )
+            dest = report_path or _default_report_path(output)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(report, encoding="utf-8")
+            failed = sum(1 for o in outcomes if o.status == "failed")
+            ok = len(outcomes) - failed
+            logging.info(
+                "Fetch summary: %s ok, %s failed (report: %s)",
+                ok,
+                failed,
+                dest,
+            )
+
         if sample_per_section:
             logging.info(
                 "Wrote %s (%s toc entries, %s with full content, %s sections sampled)",
@@ -97,6 +110,10 @@ def run(
                 len(all_chapters),
                 fetch_count,
             )
+
+        if outcomes and any(o.status == "failed" for o in outcomes):
+            return 1
+        return 0
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -146,6 +163,32 @@ def main(argv: list[str] | None = None) -> None:
         help="Seconds to wait between HTTP requests",
     )
     parser.add_argument(
+        "--chapter-success-delay",
+        type=float,
+        default=None,
+        help="Seconds to wait after each chapter fetch succeeds "
+        "(default: 5 for --all, 0 otherwise)",
+    )
+    parser.add_argument(
+        "--max-retries",
+        type=int,
+        default=None,
+        help="Max attempts per chapter (default: 3 for --all, 1 otherwise)",
+    )
+    parser.add_argument(
+        "--retry-delay",
+        type=float,
+        default=2.0,
+        help="Extra seconds between failed attempts for the same chapter",
+    )
+    parser.add_argument(
+        "--report",
+        type=Path,
+        default=None,
+        help="Write fetch summary report to this path "
+        "(default: <output-stem>-fetch-report.txt next to EPUB)",
+    )
+    parser.add_argument(
         "--title",
         default=BOOK_TITLE,
         help="EPUB metadata title",
@@ -164,19 +207,25 @@ def main(argv: list[str] | None = None) -> None:
         sample_per_section = False
 
     try:
-        run(
+        exit_code = run(
             output=args.output,
             book_url=args.book_url,
             content_limit=content_limit,
             sample_per_section=sample_per_section,
             delay=args.delay,
             book_title=args.title,
+            chapter_success_delay=args.chapter_success_delay,
+            max_retries=args.max_retries,
+            retry_delay=args.retry_delay,
+            report_path=args.report,
         )
     except KeyboardInterrupt:
         raise SystemExit(130) from None
     except Exception as exc:
         logging.error("%s", exc)
         raise SystemExit(1) from exc
+    else:
+        raise SystemExit(exit_code)
 
 
 if __name__ == "__main__":
