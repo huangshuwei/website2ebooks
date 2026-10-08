@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 MUNGER_INDEX_URL = "https://munger.ayaseeri.com/"
 MUNGER_READER_URL = "https://munger.ayaseeri.com/books/munger-qa/reader"
 MUNGER_QA_INDEX_PATH = "/books/munger-qa/"
+MUNGER_QA_TOC_GROUP = "芒格问答录"
 
 _WHITESPACE = re.compile(r"\s+")
 
@@ -79,8 +80,7 @@ def should_skip_munger_nav_href(href: str, base: str = MUNGER_INDEX_URL) -> bool
 def parse_qa_chapter_refs_from_reader(
     reader_html: str,
     *,
-    section_label: str,
-    group_label: str,
+    group_label: str = MUNGER_QA_TOC_GROUP,
     reader_url: str = MUNGER_READER_URL,
 ) -> list[ChapterRef]:
     doc = html.fromstring(reader_html)
@@ -100,7 +100,7 @@ def parse_qa_chapter_refs_from_reader(
             ChapterRef(
                 title=title,
                 url=url,
-                toc_path=(section_label, group_label, title),
+                toc_path=(group_label, title),
                 kind="munger_qa",
             )
         )
@@ -147,8 +147,7 @@ def parse_munger_chapters_from_html(
                     if reader_html:
                         qa_refs = parse_qa_chapter_refs_from_reader(
                             reader_html,
-                            section_label=section_label,
-                            group_label=group_label,
+                            group_label=MUNGER_QA_TOC_GROUP,
                         )
                         for ref in qa_refs:
                             if ref.url in seen_urls:
@@ -176,7 +175,7 @@ def parse_munger_chapters_from_html(
                     ChapterRef(
                         title=title,
                         url=url,
-                        toc_path=(section_label, group_label, title),
+                        toc_path=(group_label, title),
                         kind="standard",
                     )
                 )

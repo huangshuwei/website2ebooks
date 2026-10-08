@@ -198,3 +198,22 @@ def indices_for_one_per_toc_section(chapters: Sequence[ChapterRef]) -> frozenset
         seen.add(key)
         out.append(i)
     return frozenset(out)
+
+
+def indices_for_named_sections(
+    chapters: Sequence[ChapterRef],
+    section_names: Sequence[str],
+) -> frozenset[int]:
+    """1-based indices of the first chapter in each named toc section (toc_path[0])."""
+    from website2ebooks.toc_page import chapter_toc_section
+
+    out: list[int] = []
+    for name in section_names:
+        key = name.strip()
+        if not key:
+            continue
+        for i, ch in enumerate(chapters, start=1):
+            if chapter_toc_section(ch) == key:
+                out.append(i)
+                break
+    return frozenset(out)

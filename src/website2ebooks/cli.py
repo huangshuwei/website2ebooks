@@ -8,8 +8,12 @@ from pathlib import Path
 from website2ebooks.epub_export import build_epub
 from website2ebooks.fetch_run import fetch_chapters_serial, format_fetch_report
 from website2ebooks.http import SiteClient
-from website2ebooks.nav import indices_for_one_per_toc_section
+from website2ebooks.nav import (
+    indices_for_named_sections,
+    indices_for_one_per_toc_section,
+)
 from website2ebooks.sites import get_site_profile
+from website2ebooks.toc_page import chapter_toc_section
 
 
 def _configure_logging(verbose: bool) -> None:
@@ -30,6 +34,7 @@ def run(
     book_url: str,
     content_limit: int | None,
     sample_per_section: bool,
+    sample_section_names: list[str] | None,
     delay: float,
     book_title: str,
     chapter_success_delay: float | None,
@@ -44,10 +49,27 @@ def run(
         if not all_chapters:
             raise SystemExit("No chapters found in nav.")
 
-        unlimited = not sample_per_section and (
-            content_limit is None or content_limit <= 0
+        unlimited = (
+            not sample_per_section
+            and not sample_section_names
+            and (content_limit is None or content_limit <= 0)
         )
-        if sample_per_section:
+        if sample_section_names:
+            fetch_indices = indices_for_named_sections(
+                all_chapters, sample_section_names
+            )
+            matched = {
+                chapter_toc_section(all_chapters[i - 1]) for i in fetch_indices
+            }
+            for name in sample_section_names:
+                key = name.strip()
+                if key and key not in matched:
+                    logging.warning(
+                        "No chapter in toc section %r for --sample-sections",
+                        key,
+                    )
+            fetch_count = len(fetch_indices)
+        elif sample_per_section:
             fetch_indices = indices_for_one_per_toc_section(all_chapters)
             fetch_count = len(fetch_indices)
         elif unlimited:
@@ -98,7 +120,7 @@ def run(
                 dest,
             )
 
-        if sample_per_section:
+        if sample_per_section or sample_section_names:
             logging.info(
                 "Wrote %s (%s toc entries, %s with full content, %s sections sampled)",
                 output,
@@ -160,6 +182,13 @@ def main(argv: list[str] | None = None) -> None:
         "(toc_path[0]); remaining entries are stub pages.",
     )
     parser.add_argument(
+        "--sample-sections",
+        default=None,
+        metavar="NAMES",
+        help="Comma-separated toc section names (toc_path[0]); fetch the first chapter "
+        "in each named section. Mutually exclusive with --content-limit/--all.",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=None,
@@ -213,12 +242,22 @@ def main(argv: list[str] | None = None) -> None:
 
     content_limit: int | None = args.content_limit
     sample_per_section = args.sample_per_section
+    sample_section_names: list[str] | None = None
+    if args.sample_sections:
+        sample_section_names = [
+            s.strip() for s in args.sample_sections.split(",") if s.strip()
+        ]
     if args.all:
         content_limit = 0
         sample_per_section = False
+        sample_section_names = None
     if args.limit is not None:
         content_limit = args.limit
         sample_per_section = False
+        sample_section_names = None
+    if sample_section_names:
+        sample_per_section = False
+        content_limit = None
 
     try:
         exit_code = run(
@@ -226,6 +265,7 @@ def main(argv: list[str] | None = None) -> None:
             book_url=book_url,
             content_limit=content_limit,
             sample_per_section=sample_per_section,
+            sample_section_names=sample_section_names,
             delay=args.delay,
             book_title=book_title,
             chapter_success_delay=args.chapter_success_delay,
