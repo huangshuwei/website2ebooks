@@ -6,7 +6,11 @@ from website2ebooks.article import ParsedChapter
 from website2ebooks.fetch_run import FetchContext
 from website2ebooks.http import SiteClient
 from website2ebooks.munger_article import fetch_and_parse_munger_chapter
-from website2ebooks.munger_nav import MUNGER_INDEX_URL, parse_munger_chapters
+from website2ebooks.munger_nav import (
+    MUNGER_INDEX_URL,
+    MUNGER_SAMPLE_PREFERRED_TITLE_BY_SECTION,
+    parse_munger_chapters,
+)
 from website2ebooks.nav import ChapterRef
 from website2ebooks.sites.profile import SiteProfile
 
@@ -36,4 +40,5 @@ MUNGER_PROFILE = SiteProfile(
     default_output=Path("dist/munger-knowledge-base.epub"),
     parse_chapters=parse_munger_chapters,
     parse_chapter=_parse_munger_chapter,
+    sample_section_preferred_titles=MUNGER_SAMPLE_PREFERRED_TITLE_BY_SECTION,
 )

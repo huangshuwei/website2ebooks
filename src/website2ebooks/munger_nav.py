@@ -15,13 +15,16 @@ MUNGER_INDEX_URL = "https://munger.ayaseeri.com/"
 MUNGER_READER_URL = "https://munger.ayaseeri.com/books/munger-qa/reader"
 MUNGER_QA_INDEX_PATH = "/books/munger-qa/"
 MUNGER_QA_TOC_GROUP = "芒格问答录"
+MUNGER_EXCLUDED_NAV_PATHS = ("/thinking-grids/",)
+MUNGER_SAMPLE_PREFERRED_TITLE_BY_SECTION: dict[str, str] = {
+    "其他": "探索智慧",
+}
 
 _WHITESPACE = re.compile(r"\s+")
 
 MUNGER_ALLOWED_PREFIXES = (
     "/sources/",
     "/articles/",
-    "/thinking-grids/",
     "/stop-doing/",
     "/book-list/",
 )
@@ -72,7 +75,11 @@ def should_skip_munger_nav_href(href: str, base: str = MUNGER_INDEX_URL) -> bool
     if is_munger_qa_index_href(href, base):
         return True
     path = urlparse(urljoin(base, href.split("#", 1)[0])).path or "/"
-    if path == "/search" or path.startswith("/search/"):
+    if not path.endswith("/"):
+        path = f"{path}/"
+    if path == "/search/" or path.startswith("/search/"):
+        return True
+    if any(path.startswith(excluded) for excluded in MUNGER_EXCLUDED_NAV_PATHS):
         return True
     return not any(path.startswith(prefix) for prefix in MUNGER_ALLOWED_PREFIXES)
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Literal
 from urllib.parse import urljoin, urlparse, urlunparse
@@ -185,35 +185,75 @@ def parse_chapters(
     raise ValueError(f"No chapters found in nav at {book_index_url}")
 
 
-def indices_for_one_per_toc_section(chapters: Sequence[ChapterRef]) -> frozenset[int]:
+def _index_for_section_sample(
+    chapters: Sequence[ChapterRef],
+    section: str,
+    *,
+    preferred_title_by_section: Mapping[str, str] | None = None,
+) -> int | None:
+    from website2ebooks.toc_page import chapter_toc_section
+
+    indices_in_section = [
+        i
+        for i, ch in enumerate(chapters, start=1)
+        if chapter_toc_section(ch) == section
+    ]
+    if not indices_in_section:
+        return None
+    pick = indices_in_section[0]
+    want_title = (preferred_title_by_section or {}).get(section)
+    if not want_title:
+        return pick
+    for i in indices_in_section:
+        title = chapters[i - 1].title
+        if title == want_title or want_title in title:
+            return i
+    return pick
+
+
+def indices_for_one_per_toc_section(
+    chapters: Sequence[ChapterRef],
+    *,
+    preferred_title_by_section: Mapping[str, str] | None = None,
+) -> frozenset[int]:
     """1-based indices of chapters to fetch when sampling one body per toc section."""
     from website2ebooks.toc_page import chapter_toc_section
 
-    seen: set[str] = set()
-    out: list[int] = []
-    for i, ch in enumerate(chapters, start=1):
+    section_order: list[str] = []
+    for ch in chapters:
         key = chapter_toc_section(ch)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(i)
+        if key and key not in section_order:
+            section_order.append(key)
+
+    out: list[int] = []
+    for section in section_order:
+        idx = _index_for_section_sample(
+            chapters,
+            section,
+            preferred_title_by_section=preferred_title_by_section,
+        )
+        if idx is not None:
+            out.append(idx)
     return frozenset(out)
 
 
 def indices_for_named_sections(
     chapters: Sequence[ChapterRef],
     section_names: Sequence[str],
+    *,
+    preferred_title_by_section: Mapping[str, str] | None = None,
 ) -> frozenset[int]:
     """1-based indices of the first chapter in each named toc section (toc_path[0])."""
-    from website2ebooks.toc_page import chapter_toc_section
-
     out: list[int] = []
     for name in section_names:
         key = name.strip()
         if not key:
             continue
-        for i, ch in enumerate(chapters, start=1):
-            if chapter_toc_section(ch) == key:
-                out.append(i)
-                break
+        idx = _index_for_section_sample(
+            chapters,
+            key,
+            preferred_title_by_section=preferred_title_by_section,
+        )
+        if idx is not None:
+            out.append(idx)
     return frozenset(out)

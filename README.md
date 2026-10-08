@@ -25,6 +25,7 @@
 | 目录 | EPUB 一级 = `sidebar-group-label`（如股东会与股东信、投资原则）；侧栏 `h2`（原文/解读）仅用于 DOM 遍历 |
 | 原文/解读 | `article.reader-layout` → `div.article-body` |
 | 芒格问答录 | 侧栏「芒格问答录」展开为 [`/books/munger-qa/reader`](https://munger.ayaseeri.com/books/munger-qa/reader) 内 12 章；EPUB 一级固定为 **芒格问答录** |
+| 思维格栅 | 侧栏链接 [思维格栅](https://munger.ayaseeri.com/thinking-grids/) 为交互页，**不纳入** EPUB 目录与正文 |
 
 ## 安装
 
@@ -48,7 +49,15 @@ python -m website2ebooks --content-limit 2 --output dist/buffett-test-2ch.epub
 python -m website2ebooks --site munger --content-limit 2 -o dist/munger-test-2ch.epub
 ```
 
-**芒格 — 跨两个一级分组各 1 篇正文（全目录 + 指定分组试读）：**
+**芒格 — 测试包（全目录 + 每个一级分组 1 篇正文；「其他」组试读 **探索智慧**，约 12 篇 + 问答录 1 章）：**
+
+```bash
+python -m website2ebooks --site munger \
+  --sample-per-section \
+  -o dist/munger-test-per-section.epub --delay 0.5
+```
+
+**芒格 — 指定一级分组各 1 篇（定点试读，如 2 个分组）：**
 
 ```bash
 python -m website2ebooks --site munger \

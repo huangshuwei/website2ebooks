@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 from lxml import html
 from lxml.etree import tostring
@@ -83,6 +83,49 @@ def parse_munger_qa_chapter_html(
     )
 
 
+def _parse_munger_content_blocks(
+    doc: html.HtmlElement,
+    *,
+    page_url: str,
+    chapter_title: str,
+    chapter_index: int,
+    client: SiteClient,
+) -> ParsedChapter | None:
+    blocks = doc.xpath("//section[contains(@class,'content-block')]")
+    if not blocks:
+        return None
+
+    from website2ebooks import article as article_mod
+
+    wrapper = html.Element("div")
+    title_nodes = doc.xpath("//header[contains(@class,'title-page')]")
+    if title_nodes:
+        wrapper.append(
+            html.fromstring(tostring(title_nodes[0], encoding="unicode"))
+        )
+    for block in blocks:
+        wrapper.append(html.fromstring(tostring(block, encoding="unicode")))
+    _strip_unsafe(wrapper)
+
+    body_title = None
+    h1_nodes = doc.xpath("//header[contains(@class,'title-page')]//h1")
+    if h1_nodes:
+        body_title = re.sub(r"\s+", " ", h1_nodes[0].text_content() or "").strip()
+
+    title = merge_chapter_titles(chapter_title, body_title)
+    article_mod._normalize_epub_presentation(wrapper)
+    article_mod._normalize_typography(wrapper)
+    if article_mod.STRIP_LINKS:
+        article_mod._unwrap_links(wrapper)
+    images = article_mod._process_images(wrapper, page_url, client, chapter_index)
+    body = article_mod._serialize_article_fragment(wrapper)
+    return ParsedChapter(
+        title=title,
+        xhtml_body=article_mod._wrap_xhtml(body, title),
+        images=images,
+    )
+
+
 def parse_munger_reader_page_html(
     page_html: str,
     *,
@@ -92,6 +135,23 @@ def parse_munger_reader_page_html(
     client: SiteClient,
 ) -> ParsedChapter:
     doc = html.fromstring(page_html)
+    iframe_nodes = doc.xpath(
+        "//iframe[contains(@class,'standalone-reader-frame')][@src]"
+    )
+    if iframe_nodes:
+        reader_url = urljoin(page_url, iframe_nodes[0].get("src") or "")
+        reader_html = client.get_text(reader_url)
+        reader_doc = html.fromstring(reader_html)
+        parsed = _parse_munger_content_blocks(
+            reader_doc,
+            page_url=reader_url,
+            chapter_title=chapter_title,
+            chapter_index=chapter_index,
+            client=client,
+        )
+        if parsed:
+            return parsed
+
     body_nodes = doc.xpath(
         "//article[contains(@class,'reader-layout')]//div[contains(@class,'article-body')]"
     )
@@ -124,6 +184,16 @@ def parse_munger_reader_page_html(
             xhtml_body=article_mod._wrap_xhtml(body, title),
             images=images,
         )
+
+    parsed_blocks = _parse_munger_content_blocks(
+        doc,
+        page_url=page_url,
+        chapter_title=chapter_title,
+        chapter_index=chapter_index,
+        client=client,
+    )
+    if parsed_blocks:
+        return parsed_blocks
 
     main_article = doc.xpath("//main//article")
     if main_article:

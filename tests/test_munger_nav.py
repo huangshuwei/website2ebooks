@@ -23,6 +23,11 @@ def test_should_skip_munger_qa_index() -> None:
     assert not should_skip_munger_nav_href("/sources/1977年-蓝筹印花致股东信/")
 
 
+def test_should_skip_thinking_grids() -> None:
+    assert should_skip_munger_nav_href("/thinking-grids/")
+    assert should_skip_munger_nav_href("https://munger.ayaseeri.com/thinking-grids/")
+
+
 def test_is_munger_qa_index_href() -> None:
     assert is_munger_qa_index_href("/books/munger-qa/")
 

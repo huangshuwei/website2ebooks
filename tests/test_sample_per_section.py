@@ -23,6 +23,17 @@ def test_chapter_toc_section_matches_toc_path() -> None:
     assert chapter_toc_section(flat) == ""
 
 
+def test_indices_preferred_title_in_section() -> None:
+    chapters = [
+        ChapterRef("思维格栅", "https://example.com/grids/", ("其他", "思维格栅")),
+        ChapterRef("不可为清单", "https://example.com/stop/", ("其他", "不可为清单")),
+        ChapterRef("探索智慧", "https://example.com/wisdom/", ("其他", "探索智慧")),
+    ]
+    assert indices_for_one_per_toc_section(
+        chapters, preferred_title_by_section={"其他": "探索智慧"}
+    ) == frozenset({3})
+
+
 def test_indices_for_named_sections() -> None:
     chapters = [
         ChapterRef("A", "https://example.com/1/", ("组一", "A")),

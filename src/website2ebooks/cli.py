@@ -54,9 +54,12 @@ def run(
             and not sample_section_names
             and (content_limit is None or content_limit <= 0)
         )
+        preferred_titles = profile.sample_section_preferred_titles
         if sample_section_names:
             fetch_indices = indices_for_named_sections(
-                all_chapters, sample_section_names
+                all_chapters,
+                sample_section_names,
+                preferred_title_by_section=preferred_titles,
             )
             matched = {
                 chapter_toc_section(all_chapters[i - 1]) for i in fetch_indices
@@ -70,7 +73,10 @@ def run(
                     )
             fetch_count = len(fetch_indices)
         elif sample_per_section:
-            fetch_indices = indices_for_one_per_toc_section(all_chapters)
+            fetch_indices = indices_for_one_per_toc_section(
+                all_chapters,
+                preferred_title_by_section=preferred_titles,
+            )
             fetch_count = len(fetch_indices)
         elif unlimited:
             fetch_indices = frozenset(range(1, len(all_chapters) + 1))
