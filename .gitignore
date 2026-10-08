@@ -1,4 +1,5 @@
 dist/
+tests/fixtures/_munger_*_probe.html
 _nav_dump.txt
 _nav_inner.html
 *.epub

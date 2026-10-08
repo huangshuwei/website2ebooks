@@ -4,6 +4,7 @@ import logging
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from typing import Literal
 from urllib.parse import urljoin, urlparse, urlunparse
 
 from lxml import html
@@ -21,11 +22,15 @@ logger = logging.getLogger(__name__)
 _WHITESPACE = re.compile(r"\s+")
 
 
+ChapterKind = Literal["standard", "munger_qa"]
+
+
 @dataclass(frozen=True)
 class ChapterRef:
     title: str
     url: str
     toc_path: tuple[str, ...] = field(default_factory=tuple)
+    kind: ChapterKind = "standard"
 
 
 def normalize_url(url: str, base: str = BOOK_INDEX_URL) -> str:

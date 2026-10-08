@@ -2,20 +2,27 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 from website2ebooks.article import (
     ParsedChapter,
-    fetch_and_parse_chapter,
     make_stub_chapter,
     make_stub_fetch_failed_chapter,
 )
 from website2ebooks.http import SiteClient
+from website2ebooks.munger_nav import MUNGER_READER_URL
 from website2ebooks.nav import ChapterRef
+from website2ebooks.sites.profile import SiteProfile
 from website2ebooks.toc_page import chapter_toc_section
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class FetchContext:
+    munger_qa_reader_html: str | None = field(default=None)
+    _munger_reader_loaded: bool = field(default=False, repr=False)
 
 
 @dataclass(frozen=True)
@@ -29,11 +36,24 @@ class ChapterFetchOutcome:
     parsed: ParsedChapter
 
 
+def _ensure_munger_reader_cache(
+    client: SiteClient,
+    ctx: FetchContext,
+    chapter: ChapterRef,
+) -> None:
+    if chapter.kind != "munger_qa" or ctx._munger_reader_loaded:
+        return
+    ctx.munger_qa_reader_html = client.get_text(MUNGER_READER_URL)
+    ctx._munger_reader_loaded = True
+
+
 def fetch_chapter_with_retry(
     client: SiteClient,
     chapter: ChapterRef,
     chapter_index: int,
     *,
+    profile: SiteProfile,
+    fetch_ctx: FetchContext,
     max_retries: int,
     retry_delay: float,
 ) -> ChapterFetchOutcome:
@@ -41,11 +61,9 @@ def fetch_chapter_with_retry(
     attempts = max(1, max_retries)
     for attempt in range(1, attempts + 1):
         try:
-            parsed = fetch_and_parse_chapter(
-                client,
-                chapter_url=chapter.url,
-                chapter_title=chapter.title,
-                chapter_index=chapter_index,
+            _ensure_munger_reader_cache(client, fetch_ctx, chapter)
+            parsed = profile.parse_chapter(
+                client, chapter, chapter_index, fetch_ctx
             )
             return ChapterFetchOutcome(
                 index=chapter_index,
@@ -90,6 +108,7 @@ def fetch_chapters_serial(
     all_chapters: list[ChapterRef],
     fetch_indices: frozenset[int],
     *,
+    profile: SiteProfile,
     fetch_count: int,
     max_retries: int,
     retry_delay: float,
@@ -100,6 +119,7 @@ def fetch_chapters_serial(
     fetched_so_far = 0
     logged_stub = False
     sorted_fetch = sorted(fetch_indices)
+    fetch_ctx = FetchContext()
 
     for index, chapter in enumerate(all_chapters, start=1):
         if index in fetch_indices:
@@ -117,6 +137,8 @@ def fetch_chapters_serial(
                 client,
                 chapter,
                 index,
+                profile=profile,
+                fetch_ctx=fetch_ctx,
                 max_retries=max_retries,
                 retry_delay=retry_delay,
             )

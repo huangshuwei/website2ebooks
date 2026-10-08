@@ -5,11 +5,11 @@ import logging
 import sys
 from pathlib import Path
 
-from website2ebooks.config import BOOK_INDEX_URL, BOOK_TITLE
 from website2ebooks.epub_export import build_epub
 from website2ebooks.fetch_run import fetch_chapters_serial, format_fetch_report
 from website2ebooks.http import SiteClient
-from website2ebooks.nav import indices_for_one_per_toc_section, parse_chapters
+from website2ebooks.nav import indices_for_one_per_toc_section
+from website2ebooks.sites import get_site_profile
 
 
 def _configure_logging(verbose: bool) -> None:
@@ -36,9 +36,11 @@ def run(
     max_retries: int | None,
     retry_delay: float,
     report_path: Path | None,
+    site_id: str,
 ) -> int:
+    profile = get_site_profile(site_id)
     with SiteClient(delay=delay) as client:
-        all_chapters = parse_chapters(client.get_text, book_url)
+        all_chapters = profile.parse_chapters(client.get_text, book_url)
         if not all_chapters:
             raise SystemExit("No chapters found in nav.")
 
@@ -69,6 +71,7 @@ def run(
             client,
             all_chapters,
             fetch_indices,
+            profile=profile,
             fetch_count=fetch_count,
             max_retries=effective_max_retries,
             retry_delay=retry_delay,
@@ -118,19 +121,25 @@ def run(
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
-        description="Generate EPUB from buffett.ayaseeri.com sidebar navigation.",
+        description="Generate EPUB from ayaseeri.com knowledge-base sidebar navigation.",
+    )
+    parser.add_argument(
+        "--site",
+        choices=("buffett", "munger"),
+        default="buffett",
+        help="Site preset (default: buffett)",
     )
     parser.add_argument(
         "--output",
         "-o",
         type=Path,
-        default=Path("dist/buffett-wenda-lu.epub"),
-        help="Output EPUB path",
+        default=None,
+        help="Output EPUB path (default depends on --site)",
     )
     parser.add_argument(
         "--book-url",
-        default=BOOK_INDEX_URL,
-        help="Book index URL used to parse sidebar nav",
+        default=None,
+        help="Nav index URL (default depends on --site)",
     )
     parser.add_argument(
         "--content-limit",
@@ -190,12 +199,17 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "--title",
-        default=BOOK_TITLE,
-        help="EPUB metadata title",
+        default=None,
+        help="EPUB metadata title (default depends on --site)",
     )
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args(argv)
     _configure_logging(args.verbose)
+
+    profile = get_site_profile(args.site)
+    book_url = args.book_url or profile.nav_index_url
+    book_title = args.title or profile.book_title
+    output = args.output or profile.default_output
 
     content_limit: int | None = args.content_limit
     sample_per_section = args.sample_per_section
@@ -208,16 +222,17 @@ def main(argv: list[str] | None = None) -> None:
 
     try:
         exit_code = run(
-            output=args.output,
-            book_url=args.book_url,
+            output=output,
+            book_url=book_url,
             content_limit=content_limit,
             sample_per_section=sample_per_section,
             delay=args.delay,
-            book_title=args.title,
+            book_title=book_title,
             chapter_success_delay=args.chapter_success_delay,
             max_retries=args.max_retries,
             retry_delay=args.retry_delay,
             report_path=args.report,
+            site_id=args.site,
         )
     except KeyboardInterrupt:
         raise SystemExit(130) from None

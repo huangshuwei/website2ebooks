@@ -3,15 +3,30 @@ from unittest.mock import MagicMock, patch
 from website2ebooks.article import ParsedChapter, make_stub_chapter
 from website2ebooks.fetch_run import (
     ChapterFetchOutcome,
+    FetchContext,
     fetch_chapter_with_retry,
     fetch_chapters_serial,
     format_fetch_report,
 )
-from website2ebooks.nav import ChapterRef
+from pathlib import Path
+
+from website2ebooks.nav import ChapterRef, parse_chapters
+from website2ebooks.sites.profile import SiteProfile
 
 
 def _parsed(title: str) -> ParsedChapter:
     return make_stub_chapter(title)
+
+
+def _test_profile(parse_chapter) -> SiteProfile:
+    return SiteProfile(
+        id="buffett",
+        nav_index_url="https://buffett.ayaseeri.com/books/buffett-wenda-lu/",
+        book_title="测试",
+        default_output=Path("dist/test.epub"),
+        parse_chapters=parse_chapters,
+        parse_chapter=parse_chapter,
+    )
 
 
 def test_fetch_chapter_with_retry_succeeds_on_third_attempt() -> None:
@@ -19,22 +34,22 @@ def test_fetch_chapter_with_retry_succeeds_on_third_attempt() -> None:
     client = MagicMock()
     side_effects = [RuntimeError("net"), RuntimeError("net again"), _parsed("A")]
 
-    with patch(
-        "website2ebooks.fetch_run.fetch_and_parse_chapter",
-        side_effect=side_effects,
-    ) as mock_fetch:
-        with patch("website2ebooks.fetch_run.time.sleep") as mock_sleep:
-            outcome = fetch_chapter_with_retry(
-                client,
-                chapter,
-                1,
-                max_retries=3,
-                retry_delay=2.0,
-            )
+    mock_parse = MagicMock(side_effect=side_effects)
+    profile = _test_profile(mock_parse)
+    with patch("website2ebooks.fetch_run.time.sleep") as mock_sleep:
+        outcome = fetch_chapter_with_retry(
+            client,
+            chapter,
+            1,
+            profile=profile,
+            fetch_ctx=FetchContext(),
+            max_retries=3,
+            retry_delay=2.0,
+        )
 
     assert outcome.status == "ok"
     assert outcome.attempts == 3
-    assert mock_fetch.call_count == 3
+    assert mock_parse.call_count == 3
     assert mock_sleep.call_count == 2
 
 
@@ -42,17 +57,16 @@ def test_fetch_chapter_with_retry_fails_uses_stub() -> None:
     chapter = ChapterRef("B", "https://example.com/b/", ("组", "B"))
     client = MagicMock()
 
-    with patch(
-        "website2ebooks.fetch_run.fetch_and_parse_chapter",
-        side_effect=ValueError("parse error"),
-    ):
-        outcome = fetch_chapter_with_retry(
-            client,
-            chapter,
-            2,
-            max_retries=2,
-            retry_delay=0,
-        )
+    profile = _test_profile(MagicMock(side_effect=ValueError("parse error")))
+    outcome = fetch_chapter_with_retry(
+        client,
+        chapter,
+        2,
+        profile=profile,
+        fetch_ctx=FetchContext(),
+        max_retries=2,
+        retry_delay=0,
+    )
 
     assert outcome.status == "failed"
     assert outcome.attempts == 2
@@ -80,6 +94,7 @@ def test_fetch_chapters_serial_sleeps_after_success_not_after_last() -> None:
                 client,
                 chapters,
                 frozenset({1, 2}),
+                profile=_test_profile(MagicMock()),
                 fetch_count=2,
                 max_retries=1,
                 retry_delay=0,
