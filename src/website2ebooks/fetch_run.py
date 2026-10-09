@@ -19,6 +19,19 @@ from website2ebooks.toc_page import chapter_toc_section
 logger = logging.getLogger(__name__)
 
 
+def _format_duration(seconds: float) -> str:
+    if seconds < 0 or seconds != seconds:  # NaN
+        return "—"
+    total = int(round(seconds))
+    if total < 60:
+        return f"{total}s"
+    minutes, secs = divmod(total, 60)
+    if minutes < 60:
+        return f"{minutes}m{secs:02d}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h{minutes:02d}m"
+
+
 @dataclass
 class FetchContext:
     munger_qa_reader_html: str | None = field(default=None)
@@ -117,18 +130,30 @@ def fetch_chapters_serial(
     parsed: list[ParsedChapter] = []
     outcomes: list[ChapterFetchOutcome] = []
     fetched_so_far = 0
+    ok_so_far = 0
+    failed_so_far = 0
     logged_stub = False
     sorted_fetch = sorted(fetch_indices)
     fetch_ctx = FetchContext()
+    fetch_started_at = time.monotonic()
+
+    if fetch_count > 0:
+        logger.info(
+            "开始抓取正文：共 %s 章（spine 合计 %s 条）",
+            fetch_count,
+            len(all_chapters),
+        )
 
     for index, chapter in enumerate(all_chapters, start=1):
         if index in fetch_indices:
             fetched_so_far += 1
             section = chapter_toc_section(chapter) or "(flat)"
+            pct = 100.0 * fetched_so_far / fetch_count
             logger.info(
-                "[fetch %s/%s] [组: %s] %s — %s",
+                "[fetch %s/%s · %.1f%%] [组: %s] %s — %s",
                 fetched_so_far,
                 fetch_count,
+                pct,
                 section,
                 chapter.title,
                 chapter.url,
@@ -144,6 +169,26 @@ def fetch_chapters_serial(
             )
             outcomes.append(outcome)
             parsed.append(outcome.parsed)
+            if outcome.status == "ok":
+                ok_so_far += 1
+            else:
+                failed_so_far += 1
+            elapsed = time.monotonic() - fetch_started_at
+            eta_s = (
+                (elapsed / fetched_so_far) * (fetch_count - fetched_so_far)
+                if fetched_so_far
+                else 0.0
+            )
+            logger.info(
+                "进度 %s/%s (%.1f%%) | 成功 %s 失败 %s | 已用 %s | 预计剩余 %s",
+                fetched_so_far,
+                fetch_count,
+                pct,
+                ok_so_far,
+                failed_so_far,
+                _format_duration(elapsed),
+                _format_duration(eta_s),
+            )
             if (
                 outcome.status == "ok"
                 and chapter_success_delay > 0

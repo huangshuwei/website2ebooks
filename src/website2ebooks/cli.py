@@ -45,9 +45,11 @@ def run(
 ) -> int:
     profile = get_site_profile(site_id)
     with SiteClient(delay=delay) as client:
+        logging.info("正在加载侧栏目录…")
         all_chapters = profile.parse_chapters(client.get_text, book_url)
         if not all_chapters:
             raise SystemExit("No chapters found in nav.")
+        logging.info("目录已就绪：%s 条 spine 章节", len(all_chapters))
 
         unlimited = (
             not sample_per_section
@@ -106,6 +108,7 @@ def run(
             chapter_success_delay=effective_chapter_delay,
         )
 
+        logging.info("正在打包 EPUB → %s", output)
         build_epub(all_chapters, parsed, output, book_title=book_title)
 
         if outcomes:
